@@ -1,0 +1,6 @@
+#requires -Version 5.1
+<# Created by Dewald Pretorius. Read-only Windows Firewall policy validator. #>
+[CmdletBinding()]
+param([ValidateRange(0,10000)][int]$MaximumBroadAllowRules=20,[string]$OutputPath=(Join-Path ([Environment]::GetFolderPath('Desktop')) 'Firewall_Inventory_Validation'))
+$ErrorActionPreference='Stop';New-Item -ItemType Directory $OutputPath -Force|Out-Null;$s=Get-Date -Format yyyyMMdd_HHmmss
+try{$profiles=@(Get-NetFirewallProfile|Select-Object Name,Enabled,DefaultInboundAction,DefaultOutboundAction);$rules=@(Get-NetFirewallRule -Enabled True -Action Allow|ForEach-Object{$r=$_;$addr=$r|Get-NetFirewallAddressFilter;[pscustomobject]@{Name=$r.DisplayName;Direction=$r.Direction;Profile=$r.Profile;RemoteAddress=($addr.RemoteAddress-join',');Broad=(@($addr.RemoteAddress|Where-Object{$_-in'Any','0.0.0.0/0','::/0'}).Count-gt 0)}});$broad=@($rules|Where-Object Broad);[ordered]@{Generated=(Get-Date);Profiles=$profiles;EnabledAllowRuleCount=$rules.Count;BroadAllowRuleCount=$broad.Count;Threshold=$MaximumBroadAllowRules;BroadRules=$broad}|ConvertTo-Json -Depth 6|Set-Content (Join-Path $OutputPath "firewall_validation_$s.json");if(@($profiles|Where-Object{-not$_.Enabled}).Count-or$broad.Count-gt$MaximumBroadAllowRules){exit 1};exit 0}catch{Write-Error $_;exit 5}
